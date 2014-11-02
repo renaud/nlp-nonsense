@@ -37,14 +37,16 @@ class SelectorMenu(object):
     KEYS_CONFIRM_YES = [curses.KEY_ENTER, ord('\n')]
     KEYS_CONFIRM_NO = [27, ord(' '), ord('q')]
 
-    def __init__(self, scr, items, header="", init_choice=None,
+    def __init__(self, scr, items, header="",
+                 hoffset=0, pad=(0,0),
                  skiplines=1, loc=(0,0), size=None,
                  option0="No Label", close_delay=0.0):
         # Initialize window
         if not size == None:
             self.window = scr.subwin(size[0], size[1], loc[0], loc[1])
         else:
-            self.window = scr.subwin(*loc)
+            my, mx = scr.getmaxyx()
+            self.window = scr.subwin(my - pad[0] - loc[0], mx - pad[1] - loc[1], loc[0], loc[1])
 
         self.window.keypad(1)
         # self.panel = panel.new_panel(self.window)
@@ -52,20 +54,20 @@ class SelectorMenu(object):
         # panel.update_panels()
 
         # Current position in menu, finalized to choice on enter
-        self.position = 1 # start at first entry
+        self.position = 0 # start at first entry
         self.choice = None
 
-        # For resuming sessions: initial choice, position
-        if init_choice != None:
-            self.position = init_choice
-            self.choice = init_choice
+        # Expect items = [(label, key, keyname)]
+        self.KEYS_SPECIAL_CHOICE = {v[1]:i for i,v in enumerate(items) if len(v) > 1}
+        self.KEYS_SPECIAL_CHOICE_NAMES = {i:v[2] for i,v in enumerate(items) if len(v) > 2}
 
         # Menu items, as text
-        self.items = [option0] + items
+        self.items = [v[0] for v in items]
         self.items = map(clean_and_split, self.items)
 
         self.header = clean_and_split(header)
         self.skiplines = skiplines
+        self.hoffset = hoffset
         self.close_delay = close_delay
 
     def get_choice(self):
@@ -93,7 +95,7 @@ class SelectorMenu(object):
 
     def _confirm(self, msg, y, x, keys_yes=KEYS_CONFIRM_YES, keys_no=KEYS_CONFIRM_NO):
         """Display a confirmation dialog of msg at position x,y"""
-        self.window.addstr(y, x, msg, curses.A_NORMAL)
+        self.window.addstr(y, x+self.hoffset, msg, curses.A_NORMAL)
 
         ret = None
         while True:
@@ -119,7 +121,7 @@ class SelectorMenu(object):
         """Draw headers. Return next line to draw on."""
         for i, line in enumerate(self.header):
             line = self._clip_line(line, self.width)
-            self.window.addstr(y+i, x, line, curses.A_NORMAL)
+            self.window.addstr(y+i, x+self.hoffset, line, curses.A_NORMAL)
         return y+i+1+self.skiplines
 
     def _draw_items(self,y,x):
@@ -132,13 +134,13 @@ class SelectorMenu(object):
             else:                   mode = curses.A_NORMAL
 
             # Construct line prefixes
-            prefix = "[%d] " % i
+            prefix = "[%d/%s] " % (i, self.KEYS_SPECIAL_CHOICE_NAMES[i])
             prefixes = [prefix] + [" "*len(prefix)] * (len(lines)-1)
 
             # Draw lines
             for p,l in zip(prefixes, lines):
                 line = self._clip_line(p+l, self.width)
-                self.window.addstr(yloc, x, line, mode)
+                self.window.addstr(yloc, x+self.hoffset, line, mode)
                 yloc += 1
 
             # Skip lines after entry
@@ -205,6 +207,14 @@ class SelectorMenu(object):
                 self._navigate_to(idx)
                 break
 
+            # Quick choice, with special key
+            if key in self.KEYS_SPECIAL_CHOICE:
+                idx = self.KEYS_SPECIAL_CHOICE[key]
+                self.status = self.MENU_CHOSEN
+                self.choice = idx
+                self._navigate_to(idx)
+                break
+
             # Navigate
             elif key == curses.KEY_UP:
                 self._navigate(-1)
@@ -258,10 +268,10 @@ class SelectorApp(object):
         counter = 0
         for df_idx,row in df.iterrows():
             counter += 1
-            header = "Line: {   %s   }" % row.text
+            header = "Line [%d]:\n\n    >   %s   \n" % (df_idx,row.text)
             menu = SelectorMenu(self.screen, options, header=header,
-                                init_choice=get_init_choice(row.text, choices, options),
-                                loc=(1,2), close_delay=0.250)
+                                hoffset=1, loc=(1,2), pad=(1,2),
+                                close_delay=0.250)
             menus.append((df_idx,menu))
 
         # Display menus
@@ -269,13 +279,6 @@ class SelectorApp(object):
         lastmenu = None
         while True:
             df_idx, menu = menus[loc]
-
-            # Continuity option: carry over from last menu,
-            # if this menu hasn't been seen before
-            if continuity and (lastmenu != None) and menu.get_choice() == None:
-                newpos = lastmenu.get_choice()
-                if newpos != None:
-                    menu._navigate_to(newpos)
 
             # Show menu
             menu.display()
@@ -289,7 +292,7 @@ class SelectorApp(object):
                 loc += 1
             elif status == menu.MENU_CHOSEN: # OK
                 # Record annotation
-                choices[df.text[df_idx]] = options[menu.get_choice()]
+                choices[df.text[df_idx]] = options[menu.get_choice()][0]
                 loc += 1
             else:
                 loc += 1
@@ -321,7 +324,10 @@ if __name__ == '__main__':
     df = df[df.ntok >= 3]
 
 
-    options = ["Sentence", "Fragment/Headline", "Porn/Spam", "Nonsense"]
+    options = [("No Label", ord('n'), 'N'),
+               ("Sentence", ord(' '), 'SPACE'),
+               ("Nonsense/Fragment/Headline", ord('l'), 'L'),
+               ("Porn/Explicit/Spam", ord('p'), 'P')]
     choices = {}
     if os.path.isfile(outfile):
         ans = raw_input("Output file found. Resume? [y/n]: ")
