@@ -275,7 +275,7 @@ class SelectorApp(object):
 
             max_width = self.screen.getmaxyx()[1] - 8
             lines = splitline(line, max_width, "    ")
-            header = "Line [%d]:\n\n%s\n" % (data_idx, "\n".join(lines))
+            header = "Line [%d/%d]:\n\n%s\n" % (data_idx, len(data), "\n".join(lines))
             menu = SelectorMenu(self.screen, options, header=header,
                                 hoffset=1, loc=(1,2), pad=(1,2),
                                 close_delay=0.250)
@@ -320,6 +320,10 @@ class SelectorApp(object):
 
             lastmenu = menu
 
+def prompt(p):
+    """Simple command-line yes/no prompt."""
+    ans = raw_input(p + " [y/n]: ")
+    return (ans[0].lower() == 'y')
 
 if __name__ == '__main__':
 
@@ -329,17 +333,26 @@ if __name__ == '__main__':
     print "Loading data from %s" % infile
     with open(infile) as f:
         data = [line.strip() for line in f]
+    print "Found %d entries" % len(data)
 
     options = [("No Label", ord('n'), 'N'),
                ("Sentence", ord(' '), 'SPACE'),
                ("Nonsense/Fragment/Headline", ord('l'), 'L'),
                ("Porn/Explicit/Spam", ord('p'), 'P')]
     choices = {}
+
+    # Option: Load existing labels
     if os.path.isfile(outfile):
-        ans = raw_input("Output file found. Resume? [y/n]: ")
-        if ans[0].lower() == 'y':
+        if prompt("Output file found. Resume?"):
             with open(outfile) as f:
                 choices = json.load(f)
+
+    # Option: Ignore already-labeled data
+    if len(choices) > 0:
+        if prompt("Skip already-labeled entries?"):
+            data = [line for line in data if not line in choices]
+            print "%d entries to go!" % len(data)
+
 
     curses.wrapper(SelectorApp, data, choices, options)
 

@@ -4,14 +4,14 @@ import sys, os, re
 
 def custom_filter(line):
     # Remove really short things (likely fragments)
-    if len(line) < 8: return False
+    if len(line) <= 10: return False
 
     # Remove single words
     if len(line.split()) < 2: return False
 
     # Remove obvious porn
     ll = line.lower()
-    if re.search("porn", ll): return False
+    if re.search("(porn)|(xxx)", ll): return False
 
     return True
 
