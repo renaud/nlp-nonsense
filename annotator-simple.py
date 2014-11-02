@@ -252,6 +252,11 @@ def get_init_choice(key, choices, options):
         return None # invalid choice recorded
 
 
+def splitline(line, n, prefix=""):
+    n = n - 2*len(prefix)
+    lines = [prefix + line[i:i+n] for i in xrange(0, len(line), n)]
+    return lines
+
 class SelectorApp(object):
 
     MAX_ITEMS = 10
@@ -268,7 +273,10 @@ class SelectorApp(object):
         counter = 0
         for df_idx,row in df.iterrows():
             counter += 1
-            header = "Line [%d]:\n\n    >   %s   \n" % (df_idx,row.text)
+
+            max_width = self.screen.getmaxyx()[1] - 8
+            lines = splitline(row.text, max_width, "    ")
+            header = "Line [%d]:\n\n%s\n" % (df_idx, "\n".join(lines))
             menu = SelectorMenu(self.screen, options, header=header,
                                 hoffset=1, loc=(1,2), pad=(1,2),
                                 close_delay=0.250)
@@ -320,8 +328,12 @@ if __name__ == '__main__':
     outfile = infile + ".annotated"
 
     print "Loading data from %s" % infile
+    # with open(infile) as f:
+    #     lines = [line.strip() for line in f]
+
     df = pd.read_pickle(infile)
     df = df[df.ntok >= 3]
+    df = df[df.nchars >= 50] # DEBUG: fix long lines
 
 
     options = [("No Label", ord('n'), 'N'),
