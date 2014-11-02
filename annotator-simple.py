@@ -7,7 +7,6 @@ import curses
 from curses import panel
 
 import json
-import pandas as pd
 
 ##
 # Text processing functions
@@ -261,7 +260,7 @@ class SelectorApp(object):
 
     MAX_ITEMS = 10
 
-    def __init__(self, stdscreen, df, labels, options, continuity=True):
+    def __init__(self, stdscreen, data, labels, options, continuity=True):
         self.screen = stdscreen
         curses.curs_set(0)
 
@@ -271,22 +270,22 @@ class SelectorApp(object):
         # Loop over all rows, making selector menu each time
         menus = []
         counter = 0
-        for df_idx,row in df.iterrows():
+        for data_idx,line in enumerate(data):
             counter += 1
 
             max_width = self.screen.getmaxyx()[1] - 8
-            lines = splitline(row.text, max_width, "    ")
-            header = "Line [%d]:\n\n%s\n" % (df_idx, "\n".join(lines))
+            lines = splitline(line, max_width, "    ")
+            header = "Line [%d]:\n\n%s\n" % (data_idx, "\n".join(lines))
             menu = SelectorMenu(self.screen, options, header=header,
                                 hoffset=1, loc=(1,2), pad=(1,2),
                                 close_delay=0.250)
-            menus.append((df_idx,menu))
+            menus.append((data_idx,menu))
 
         # Display menus
         loc = 0
         lastmenu = None
         while True:
-            df_idx, menu = menus[loc]
+            data_idx, menu = menus[loc]
 
             # Show menu
             menu.display()
@@ -300,7 +299,7 @@ class SelectorApp(object):
                 loc += 1
             elif status == menu.MENU_CHOSEN: # OK
                 # Record annotation
-                choices[df.text[df_idx]] = options[menu.get_choice()][0]
+                choices[data[data_idx]] = options[menu.get_choice()][0]
                 loc += 1
             else:
                 loc += 1
@@ -328,13 +327,8 @@ if __name__ == '__main__':
     outfile = infile + ".annotated"
 
     print "Loading data from %s" % infile
-    # with open(infile) as f:
-    #     lines = [line.strip() for line in f]
-
-    df = pd.read_pickle(infile)
-    df = df[df.ntok >= 3]
-    df = df[df.nchars >= 50] # DEBUG: fix long lines
-
+    with open(infile) as f:
+        data = [line.strip() for line in f]
 
     options = [("No Label", ord('n'), 'N'),
                ("Sentence", ord(' '), 'SPACE'),
@@ -347,7 +341,7 @@ if __name__ == '__main__':
             with open(outfile) as f:
                 choices = json.load(f)
 
-    curses.wrapper(SelectorApp, df, choices, options)
+    curses.wrapper(SelectorApp, data, choices, options)
 
     # DEBUG
     print json.dumps(choices, indent=1)
