@@ -7,6 +7,7 @@ import curses
 from curses import panel
 
 import json
+import collections
 
 ##
 # Text processing functions
@@ -57,11 +58,12 @@ class SelectorMenu(object):
         self.choice = None
 
         # Expect items = [(label, key, keyname)]
-        self.KEYS_SPECIAL_CHOICE = {v[1]:i for i,v in enumerate(items) if len(v) > 1}
-        self.KEYS_SPECIAL_CHOICE_NAMES = {i:v[2] for i,v in enumerate(items) if len(v) > 2}
+        self.KEYS_SPECIAL_CHOICE = {v[2]:i for i,v in enumerate(items) if len(v) > 2}
+        self.KEYS_SPECIAL_CHOICE_NAMES = {i:v[3] for i,v in enumerate(items) if len(v) > 3}
 
         # Menu items, as text
-        self.items = [v[0] for v in items]
+        self.tags = [v[0] for v in items] # tag names
+        self.items = [v[1] for v in items]
         self.items = map(clean_and_split, self.items)
 
         self.header = clean_and_split(header)
@@ -270,7 +272,7 @@ class SelectorApp(object):
         # Loop over all rows, making selector menu each time
         menus = []
         counter = 0
-        for data_idx,line in enumerate(data):
+        for data_idx,(guid,line) in enumerate(data):
             counter += 1
 
             max_width = self.screen.getmaxyx()[1] - 8
@@ -299,7 +301,8 @@ class SelectorApp(object):
                 loc += 1
             elif status == menu.MENU_CHOSEN: # OK
                 # Record annotation
-                choices[data[data_idx]] = options[menu.get_choice()][0]
+                guid, line = data[data_idx]
+                choices[guid] = (line, options[menu.get_choice()][0])
                 loc += 1
             else:
                 loc += 1
@@ -325,20 +328,32 @@ def prompt(p):
     ans = raw_input(p + " [y/n]: ")
     return (ans[0].lower() == 'y')
 
+import hashlib
+def make_GUID(filename, lineno, line):
+    """Make a GUID string."""
+    hash_obj = hashlib.md5(bytes("%s-%d-%s" % (filename, lineno, line)))
+    return hash_obj.hexdigest()
+
+
 if __name__ == '__main__':
 
     infile = sys.argv[1]
     outfile = infile + ".annotated"
 
+    # load data as (key, line)
+    # where key is an identifier
     print "Loading data from %s" % infile
     with open(infile) as f:
-        data = [line.strip() for line in f]
+        data = [(make_GUID(infile, i, line.strip()), line.strip())
+                for i, line in enumerate(f)]
     print "Found %d entries" % len(data)
 
-    options = [("No Label", ord('n'), 'N'),
-               ("Sentence", ord(' '), 'SPACE'),
-               ("Nonsense/Fragment/Headline", ord('l'), 'L'),
-               ("Porn/Explicit/Spam", ord('p'), 'P')]
+    # tag, display label, hotkey, hotkey display text
+    options = [("-NONE-", "No Label", ord('n'), 'N'),
+               ("-SENTENCE-", "Sentence", ord(' '), 'SPACE'),
+               ("-NONSENSE-", "Nonsense/Fragment/Headline", ord('l'), 'L'),
+               ("-PORN-", "Porn/Explicit/Spam", ord('p'), 'P')]
+    # stored as guid:(line,tag)
     choices = {}
 
     # Option: Load existing labels
@@ -350,7 +365,7 @@ if __name__ == '__main__':
     # Option: Ignore already-labeled data
     if len(choices) > 0:
         if prompt("Skip already-labeled entries?"):
-            data = [line for line in data if not line in choices]
+            data = [entry for entry in data if not entry[0] in choices]
             print "%d entries to go!" % len(data)
 
 
