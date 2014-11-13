@@ -26,12 +26,19 @@ public class StanfordCoreNlpExample {
         // gets the parse tree of the 1st sentence in the text.
         List<CoreMap> sentences = annotation.get(
                 CoreAnnotations.SentencesAnnotation.class);
-        if (sentences != null && sentences.size() > 0) {
-            CoreMap sentence = sentences.get(0);
+        PrintWriter out = new PrintWriter(System.out);
+        for (CoreMap sentence : sentences) {
+            // retrieve parse tree
+            out.println(sentence.keySet().toString());
             Tree tree = sentence.get(TreeAnnotation.class);
-            PrintWriter out = new PrintWriter(System.out);
-            out.println("The first sentence parsed is:");
             tree.pennPrint(out);
         }
+
+        //if (sentences != null && sentences.size() > 0) {
+        //    CoreMap sentence = sentences.get(0);
+        //    Tree tree = sentence.get(TreeAnnotation.class);
+        //    out.println("The first sentence parsed is:");
+        //    tree.pennPrint(out);
+        //}
     }
 }

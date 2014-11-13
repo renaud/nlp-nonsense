@@ -21,6 +21,7 @@
         <jarDirectory url="file://$USER_HOME$/afs/nlp-nonsense/code/corenlp" recursive="false" type="SOURCES" />
       </library>
     </orderEntry>
+    <orderEntry type="library" name="com.googlecode.json-simple:json-simple:1.1.1" level="project" />
   </component>
 </module>
 
