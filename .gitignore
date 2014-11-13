@@ -1,3 +1,6 @@
 data
 corenlp
 *.pyc
+build/
+.ipynb_checkpoints
+.idea
