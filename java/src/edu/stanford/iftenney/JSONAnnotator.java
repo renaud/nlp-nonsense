@@ -16,7 +16,7 @@ import org.json.simple.parser.ParseException;
  * Created by iftenney on 11/15/14.
  */
 
-public class PassThroughAnnotator {
+public class JSONAnnotator {
 
     public static class CustomLabelAnnotation implements CoreAnnotation<String> {
         public Class<String> getType() {
