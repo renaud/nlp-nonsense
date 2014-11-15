@@ -7,7 +7,7 @@ import curses
 from curses import panel
 
 import json
-import pandas as pd
+import collections
 
 ##
 # Text processing functions
@@ -37,14 +37,16 @@ class SelectorMenu(object):
     KEYS_CONFIRM_YES = [curses.KEY_ENTER, ord('\n')]
     KEYS_CONFIRM_NO = [27, ord(' '), ord('q')]
 
-    def __init__(self, scr, items, header="", init_choice=None,
+    def __init__(self, scr, items, header="",
+                 hoffset=0, pad=(0,0),
                  skiplines=1, loc=(0,0), size=None,
                  option0="No Label", close_delay=0.0):
         # Initialize window
         if not size == None:
             self.window = scr.subwin(size[0], size[1], loc[0], loc[1])
         else:
-            self.window = scr.subwin(*loc)
+            my, mx = scr.getmaxyx()
+            self.window = scr.subwin(my - pad[0] - loc[0], mx - pad[1] - loc[1], loc[0], loc[1])
 
         self.window.keypad(1)
         # self.panel = panel.new_panel(self.window)
@@ -52,20 +54,21 @@ class SelectorMenu(object):
         # panel.update_panels()
 
         # Current position in menu, finalized to choice on enter
-        self.position = 1 # start at first entry
+        self.position = 0 # start at first entry
         self.choice = None
 
-        # For resuming sessions: initial choice, position
-        if init_choice != None:
-            self.position = init_choice
-            self.choice = init_choice
+        # Expect items = [(label, key, keyname)]
+        self.KEYS_SPECIAL_CHOICE = {v[2]:i for i,v in enumerate(items) if len(v) > 2}
+        self.KEYS_SPECIAL_CHOICE_NAMES = {i:v[3] for i,v in enumerate(items) if len(v) > 3}
 
         # Menu items, as text
-        self.items = [option0] + items
+        self.tags = [v[0] for v in items] # tag names
+        self.items = [v[1] for v in items]
         self.items = map(clean_and_split, self.items)
 
         self.header = clean_and_split(header)
         self.skiplines = skiplines
+        self.hoffset = hoffset
         self.close_delay = close_delay
 
     def get_choice(self):
@@ -93,7 +96,7 @@ class SelectorMenu(object):
 
     def _confirm(self, msg, y, x, keys_yes=KEYS_CONFIRM_YES, keys_no=KEYS_CONFIRM_NO):
         """Display a confirmation dialog of msg at position x,y"""
-        self.window.addstr(y, x, msg, curses.A_NORMAL)
+        self.window.addstr(y, x+self.hoffset, msg, curses.A_NORMAL)
 
         ret = None
         while True:
@@ -119,7 +122,7 @@ class SelectorMenu(object):
         """Draw headers. Return next line to draw on."""
         for i, line in enumerate(self.header):
             line = self._clip_line(line, self.width)
-            self.window.addstr(y+i, x, line, curses.A_NORMAL)
+            self.window.addstr(y+i, x+self.hoffset, line, curses.A_NORMAL)
         return y+i+1+self.skiplines
 
     def _draw_items(self,y,x):
@@ -132,13 +135,13 @@ class SelectorMenu(object):
             else:                   mode = curses.A_NORMAL
 
             # Construct line prefixes
-            prefix = "[%d] " % i
+            prefix = "[%d/%s] " % (i, self.KEYS_SPECIAL_CHOICE_NAMES[i])
             prefixes = [prefix] + [" "*len(prefix)] * (len(lines)-1)
 
             # Draw lines
             for p,l in zip(prefixes, lines):
                 line = self._clip_line(p+l, self.width)
-                self.window.addstr(yloc, x, line, mode)
+                self.window.addstr(yloc, x+self.hoffset, line, mode)
                 yloc += 1
 
             # Skip lines after entry
@@ -205,6 +208,14 @@ class SelectorMenu(object):
                 self._navigate_to(idx)
                 break
 
+            # Quick choice, with special key
+            if key in self.KEYS_SPECIAL_CHOICE:
+                idx = self.KEYS_SPECIAL_CHOICE[key]
+                self.status = self.MENU_CHOSEN
+                self.choice = idx
+                self._navigate_to(idx)
+                break
+
             # Navigate
             elif key == curses.KEY_UP:
                 self._navigate(-1)
@@ -242,11 +253,16 @@ def get_init_choice(key, choices, options):
         return None # invalid choice recorded
 
 
+def splitline(line, n, prefix=""):
+    n = n - 2*len(prefix)
+    lines = [prefix + line[i:i+n] for i in xrange(0, len(line), n)]
+    return lines
+
 class SelectorApp(object):
 
     MAX_ITEMS = 10
 
-    def __init__(self, stdscreen, df, labels, options, continuity=True):
+    def __init__(self, stdscreen, data, labels, options, continuity=True):
         self.screen = stdscreen
         curses.curs_set(0)
 
@@ -256,26 +272,22 @@ class SelectorApp(object):
         # Loop over all rows, making selector menu each time
         menus = []
         counter = 0
-        for df_idx,row in df.iterrows():
+        for data_idx,(guid,line) in enumerate(data):
             counter += 1
-            header = "Line: {   %s   }" % row.text
+
+            max_width = self.screen.getmaxyx()[1] - 8
+            lines = splitline(line, max_width, "    ")
+            header = "Line [%d/%d]:\n\n%s\n" % (data_idx, len(data), "\n".join(lines))
             menu = SelectorMenu(self.screen, options, header=header,
-                                init_choice=get_init_choice(row.text, choices, options),
-                                loc=(1,2), close_delay=0.250)
-            menus.append((df_idx,menu))
+                                hoffset=1, loc=(1,2), pad=(1,2),
+                                close_delay=0.250)
+            menus.append((data_idx,menu))
 
         # Display menus
         loc = 0
         lastmenu = None
         while True:
-            df_idx, menu = menus[loc]
-
-            # Continuity option: carry over from last menu,
-            # if this menu hasn't been seen before
-            if continuity and (lastmenu != None) and menu.get_choice() == None:
-                newpos = lastmenu.get_choice()
-                if newpos != None:
-                    menu._navigate_to(newpos)
+            data_idx, menu = menus[loc]
 
             # Show menu
             menu.display()
@@ -289,7 +301,8 @@ class SelectorApp(object):
                 loc += 1
             elif status == menu.MENU_CHOSEN: # OK
                 # Record annotation
-                choices[df.text[df_idx]] = options[menu.get_choice()]
+                guid, line = data[data_idx]
+                choices[guid] = (line, options[menu.get_choice()][0])
                 loc += 1
             else:
                 loc += 1
@@ -310,26 +323,55 @@ class SelectorApp(object):
 
             lastmenu = menu
 
+def prompt(p):
+    """Simple command-line yes/no prompt."""
+    ans = raw_input(p + " [y/n]: ")
+    return (ans[0].lower() == 'y')
+
+import hashlib
+def make_GUID(filename, lineno, line):
+    """Make a GUID string."""
+    hash_obj = hashlib.md5(bytes("%s-%d-%s" % (filename, lineno, line)))
+    return hash_obj.hexdigest()
+
 
 if __name__ == '__main__':
 
     infile = sys.argv[1]
     outfile = infile + ".annotated"
 
+    # load data as (key, line)
+    # where key is an identifier
     print "Loading data from %s" % infile
-    df = pd.read_pickle(infile)
-    df = df[df.ntok >= 3]
+    with open(infile) as f:
+        data = [(make_GUID(infile, i, line.strip()), line.strip())
+                for i, line in enumerate(f)]
+    print "Found %d entries" % len(data)
 
-
-    options = ["Sentence", "Fragment/Headline", "Porn/Spam", "Nonsense"]
+    # tag, display label, hotkey, hotkey display text
+    options = [("-NONE-", "No Label", ord('n'), 'N'),
+               ("-SENTENCE-", "Sentence", ord(' '), 'SPACE'),
+               ("-HEADLINE-", "Headline/Caption", ord('h'), 'H'),
+               # ("-FRAGMENT-", "Sentence Fragment", ord('f'), 'F'),
+               ("-NONSENSE-", "Nonsense/Fragment", ord('l'), 'L'),
+               ("-PORN-", "Porn/Explicit/Spam", ord('p'), 'P')]
+    # stored as guid:(line,tag)
     choices = {}
+
+    # Option: Load existing labels
     if os.path.isfile(outfile):
-        ans = raw_input("Output file found. Resume? [y/n]: ")
-        if ans[0].lower() == 'y':
+        if prompt("Output file found. Resume?"):
             with open(outfile) as f:
                 choices = json.load(f)
 
-    curses.wrapper(SelectorApp, df, choices, options)
+    # Option: Ignore already-labeled data
+    if len(choices) > 0:
+        if prompt("Skip already-labeled entries?"):
+            data = [entry for entry in data if not entry[0] in choices]
+            print "%d entries to go!" % len(data)
+
+
+    curses.wrapper(SelectorApp, data, choices, options)
 
     # DEBUG
     print json.dumps(choices, indent=1)
