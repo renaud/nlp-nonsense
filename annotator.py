@@ -349,7 +349,7 @@ if __name__ == '__main__':
     print "Found %d entries" % len(data)
 
     # tag, display label, hotkey, hotkey display text
-    options = [("-NONE-", "No Label", ord('n'), 'N'),
+    options = [("-NONE-", "Unsure, or Foreign", ord('n'), 'N'),
                ("-SENTENCE-", "Sentence", ord(' '), 'SPACE'),
                ("-HEADLINE-", "Headline/Caption", ord('h'), 'H'),
                # ("-FRAGMENT-", "Sentence Fragment", ord('f'), 'F'),
