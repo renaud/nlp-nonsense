@@ -106,7 +106,7 @@ public class JSONAnnotator {
 
             System.out.println("Writing tagged sentence " + a.get(CustomGUIDAnnotation.class));
 
-            String json = jobj.toJSONString();
+            String json = jobj.toJSONString() + "\n";
             jsonOut.write(json);
             jsonOut.flush();
             counter++;

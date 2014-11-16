@@ -48,6 +48,13 @@ def plot_stacked_histogram(hcum, bin_edges, ax=None,
                color=c, label=l)
 
 
+def segregate_by_label(df, featurename):
+    labels = df['__LABEL__'].unique()
+    datasets = {l:list(df[df['__LABEL__'] == l][featurename])
+                for l in labels}
+    return datasets
+
+
 def visualize_conditionals(datasets, bin_edges,
                            figsize=None,
                            colors=DEFAULT_COLORCYCLE,
