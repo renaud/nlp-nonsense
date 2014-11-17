@@ -351,10 +351,12 @@ if __name__ == '__main__':
     # tag, display label, hotkey, hotkey display text
     options = [("-NONE-", "Unsure, or Foreign", ord('n'), 'N'),
                ("-SENTENCE-", "Sentence", ord(' '), 'SPACE'),
-               ("-HEADLINE-", "Headline/Caption", ord('h'), 'H'),
+               ("-FRAGMENT-", "Fragment, Headline, or Caption", ord('p'), 'P'),
+               # ("-HEADLINE-", "Headline/Caption", ord('h'), 'H'),
                # ("-FRAGMENT-", "Sentence Fragment", ord('f'), 'F'),
-               ("-NONSENSE-", "Nonsense/Fragment", ord('l'), 'L'),
-               ("-PORN-", "Porn/Explicit/Spam", ord('p'), 'P')]
+               ("-NONSENSE-", "Nonsense", ord('l'), 'L'),
+               # ("-PORN-", "Porn/Explicit/Spam", ord('p'), 'P')
+               ]
     # stored as guid:(line,tag)
     choices = {}
 
