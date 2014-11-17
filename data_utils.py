@@ -1,12 +1,12 @@
 import sys, os, re, json
-from collections import Counter
+from collections import Counter, OrderedDict
 import itertools
 from numpy import *
 import pandas as pd
 
 def load_annotated(filename):
     records = []
-    with open("data/test.txt.annotated.tagged.json") as fd:
+    with open(filename) as fd:
         for line in fd:
             records.append(json.loads(line))
 
@@ -25,11 +25,22 @@ def make_basic_features(df):
                                       and not c in
                                         [" ", "\t"])
     df['f_npunct'] = df['text'].map(punct_counter)
+    df['f_rpunct'] = df['f_npunct'] / df['f_nchars']
     df['f_ndigit'] = df['text'].map(lambda s: sum(1 for c in s
                                   if c.isdigit()))
+    df['f_rdigit'] = df['f_ndigit'] / df['f_nchars']
+
 
     df['f_nner'] = df['ner'].map(lambda ts: sum(1 for t in ts
                                               if t != 'O'))
+    df['f_rner'] = df['f_nner'] / df['f_nwords']
+
+    # Check standard sentence pattern:
+    # if starts with capital, ends with .?!
+    def check_sentence_pattern(s):
+        ss = s.strip(r"""`"'""").strip()
+        return s[0].isupper() and (s[-1] in '.?!')
+    df['f_sentence_pattern'] = df['text'].map(check_sentence_pattern)
 
     return df
 
@@ -46,7 +57,7 @@ def dataframe_to_xy(df, features=r"f_.+", ):
 
     # Design Matrix X
     df_r = df[featurenames]
-    col_to_feature = {i:l for l,i in enumerate(df_r.columns)}
+    col_to_feature = OrderedDict((i,l) for i,l in enumerate(df_r.columns))
     X = df_r.as_matrix().astype('float64')
 
     # Label Vector y
