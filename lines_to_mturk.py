@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: latin-1 -*-
 
 # Based on http://stackoverflow.com/questions/25362251/python-process-a-csv-file-to-remove-unicode-characters-greater-than-3-bytes
 
@@ -32,5 +33,6 @@ with open(args.infile, 'rU') as infile, open(args.outfile, 'w') as outfile:
         # import pdb; pdb.set_trace()
         # newline = unidecode.unidecode(newline)
         # newline = quote_replace.sub(r'\"', unicode(newline, 'utf8')).encode('utf8')
-        newline = quote_replace.sub(r'&quot;', row.strip("\n"))
+        # newline = quote_replace.sub(r'&quot;', row.strip("\n"))
+        newline = quote_replace.sub(r'‟', row.strip("\n")) # try to get around sucky unicode support?
         outfile.write('"' + newline + '"\n')
