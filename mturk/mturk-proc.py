@@ -12,6 +12,11 @@ def find_answer_field(colname):
     if m == None: return None
     return (colname, "Answer.Q%sAnswer" % m.group(1))
 
+import hashlib
+def make_GUID(s):
+    """Make a GUID string."""
+    hash_obj = hashlib.md5(bytes(s))
+    return hash_obj.hexdigest()
 
 def main(args):
     infile = args.infile
@@ -24,7 +29,7 @@ def main(args):
     for i,o in iomap.items():
         idata = df_input[i]
         odata = df_input[o]
-        id = df_input['HITId'] + "-\"" + df_input[i] + "\""
+        id = (df_input['HITId'] + "-\"" + df_input[i] + "\"").map(make_GUID)
         df_new = pd.DataFrame({"input": idata, "output": odata,
                                "id":id, 'worker_id':df_input['WorkerId']})
         dfs.append(df_new.set_index("id"))
@@ -63,11 +68,19 @@ def main(args):
     print ""
 
     # Save data to file
-    d = df.to_dict('records')
-    print "Saving %d records to %s" % (len(d), args.outfile)
+    # d = df.to_dict('records')
+    # print "Saving %d records to %s" % (len(d), args.outfile)
+    # with open(args.outfile, 'w') as fd:
+    #     for r in d:
+    #         print >> fd, json.dumps(r)
+
+    # Match format of old annotator script
+    print "Saving %d unique lines to %s" % (len(datamap), args.outfile)
+    outmap = {make_GUID(str(i)+args.infile):(str(i),o) for (i,o) in datamap.items()}
     with open(args.outfile, 'w') as fd:
-        for r in d:
-            print >> fd, json.dumps(r)
+        print >> fd, json.dumps(outmap, indent=1)
+    # for x,ys in datamap.iteritems():
+        # print >> fd, json.dumps({"text":x, "labels":ys})
 
 
 if __name__ == '__main__':
