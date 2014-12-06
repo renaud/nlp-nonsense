@@ -49,6 +49,9 @@ public class JSONAnnotator {
             EncodingFileReader fileReader = new EncodingFileReader(infile);
             obj = jp.parse(fileReader);
         } catch (ParseException e) {
+            System.out.printf("Error type: %d%n", e.getErrorType());
+            System.out.printf("Position: %d%n", e.getPosition());
+            System.out.printf("Unexpected: %s%n", e.getUnexpectedObject());
             e.printStackTrace();
             System.exit(1);
         }
@@ -62,7 +65,10 @@ public class JSONAnnotator {
 
             Annotation a = new Annotation((String)ja.get(0));
             a.set(CustomGUIDAnnotation.class, guid); // store ID
-            a.set(CustomLabelAnnotation.class, (String)ja.get(1)); // store custom label
+
+            JSONArray labels = (JSONArray)ja.get(1);
+            a.set(CustomLabelAnnotation.class, labels.toString()); // store custom label
+            // a.set(CustomLabelAnnotation.class, (String)ja.get(1)); // store custom label
             sentences.add(a);
 
             //String out = String.format("%s -> %s", ja.get(0), ja.get(1));

@@ -27,8 +27,8 @@ def main(args):
 
     dfs = []
     for i,o in iomap.items():
-        idata = df_input[i]
-        odata = df_input[o]
+        idata = df_input[i].fillna("-NONE-")
+        odata = df_input[o].fillna("-NONE-")
         id = (df_input['HITId'] + "-\"" + df_input[i] + "\"").map(make_GUID)
         df_new = pd.DataFrame({"input": idata, "output": odata,
                                "id":id, 'worker_id':df_input['WorkerId']})

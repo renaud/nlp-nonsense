@@ -4,6 +4,11 @@ import itertools
 from numpy import *
 import pandas as pd
 
+def parse_labels(ls):
+    # Handle badly-serialized labels from java code
+    try: return tuple(json.loads(ls))
+    except ValueError as e: return (ls,)
+
 def load_annotated(filename):
     records = []
     with open(filename) as fd:
@@ -12,6 +17,8 @@ def load_annotated(filename):
 
     df = pd.DataFrame.from_records(records, index='__ID__')
     df['text'] = df.word.map(lambda l: " ".join(l))
+    # Handle nested JSON
+    df['__LABEL__'] = df['__LABEL__'].map(parse_labels)
     return df
 
 def make_basic_features(df):
