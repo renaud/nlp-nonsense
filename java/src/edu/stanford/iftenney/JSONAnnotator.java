@@ -18,6 +18,12 @@ import org.json.simple.parser.ParseException;
 
 public class JSONAnnotator {
 
+    public static class CustomFulltextAnnotation implements CoreAnnotation<String> {
+        public Class<String> getType() {
+            return String.class;
+        }
+    }
+
     public static class CustomLabelAnnotation implements CoreAnnotation<String> {
         public Class<String> getType() {
             return String.class;
@@ -65,6 +71,7 @@ public class JSONAnnotator {
 
             Annotation a = new Annotation((String)ja.get(0));
             a.set(CustomGUIDAnnotation.class, guid); // store ID
+            a.set(CustomFulltextAnnotation.class, (String)ja.get(0)); // store unmodified fulltext
 
             JSONArray labels = (JSONArray)ja.get(1);
             a.set(CustomLabelAnnotation.class, labels.toString()); // store custom label
@@ -109,6 +116,7 @@ public class JSONAnnotator {
             jobj.put("ner", getTagList(tokens, NamedEntityTagAnnotation.class));
             jobj.put("__LABEL__", a.get(CustomLabelAnnotation.class));
             jobj.put("__ID__", a.get(CustomGUIDAnnotation.class));
+            jobj.put("__TEXT__", a.get(CustomFulltextAnnotation.class));
 
             System.out.println("Writing tagged sentence " + a.get(CustomGUIDAnnotation.class));
 

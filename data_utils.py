@@ -16,7 +16,7 @@ def load_annotated(filename):
             records.append(json.loads(line))
 
     df = pd.DataFrame.from_records(records, index='__ID__')
-    df['text'] = df.word.map(lambda l: " ".join(l))
+    # df['text'] = df.word.map(lambda l: " ".join(l))
     # Handle nested JSON
     df['__LABEL__'] = df['__LABEL__'].map(parse_labels)
     return df
@@ -24,16 +24,16 @@ def load_annotated(filename):
 def make_basic_features(df):
     """Compute basic features."""
 
-    df['f_nchars'] = df['text'].map(len)
+    df['f_nchars'] = df['__TEXT__'].map(len)
     df['f_nwords'] = df['word'].map(len)
 
     punct_counter = lambda s: sum(1 for c in s
                                   if (not c.isalnum())
                                       and not c in
                                         [" ", "\t"])
-    df['f_npunct'] = df['text'].map(punct_counter)
+    df['f_npunct'] = df['__TEXT__'].map(punct_counter)
     df['f_rpunct'] = df['f_npunct'] / df['f_nchars']
-    df['f_ndigit'] = df['text'].map(lambda s: sum(1 for c in s
+    df['f_ndigit'] = df['__TEXT__'].map(lambda s: sum(1 for c in s
                                   if c.isdigit()))
     df['f_rdigit'] = df['f_ndigit'] / df['f_nchars']
 
@@ -47,7 +47,7 @@ def make_basic_features(df):
     def check_sentence_pattern(s):
         ss = s.strip(r"""`"'""").strip()
         return s[0].isupper() and (s[-1] in '.?!')
-    df['f_sentence_pattern'] = df['text'].map(check_sentence_pattern)
+    df['f_sentence_pattern'] = df['__TEXT__'].map(check_sentence_pattern)
 
     return df
 
