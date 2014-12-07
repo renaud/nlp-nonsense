@@ -9,6 +9,11 @@ def parse_labels(ls):
     try: return tuple(json.loads(ls))
     except ValueError as e: return (ls,)
 
+def binarize_label(l):
+    if l == None: return l
+    if "SENTENCE" in l: return "-SENTENCE-"
+    else: return "-OTHER-"
+
 def load_annotated(filename):
     records = []
     with open(filename) as fd:
@@ -19,6 +24,12 @@ def load_annotated(filename):
     # df['text'] = df.word.map(lambda l: " ".join(l))
     # Handle nested JSON
     df['__LABEL__'] = df['__LABEL__'].map(parse_labels)
+
+    # Disambiguate and binarize labels
+    df["__LABELS__"] = df["__LABEL__"]
+    df["__LABEL__"] = df["__LABEL__"].map(lambda l: l[0] if len(set(l)) == 1 else None)
+    df["__LABEL_BIN__"] = df["__LABEL__"].map(binarize_label)
+
     return df
 
 def make_basic_features(df):
@@ -51,8 +62,29 @@ def make_basic_features(df):
 
     return df
 
+# Get all POS tags
+def get_pos_counts(df, firstchar_only=False):
+    # Count tags for each sentence
+    if firstchar_only == True:
+        source = df['pos'].map(lambda s: [t[0] for t in s])
+    else:
+        source = df['pos']
+    counters = source.map(Counter)
+    tagnames = sorted(reduce(lambda a,b: a.union(b), source.map(set), set()))
+    # Construct DataFrame mapping counters -> rows
+    pos_df = pd.DataFrame.from_records(counters,
+                                       index=df.index,
+                                       columns=tagnames,
+                                       coerce_float=True)
+    pos_df.fillna(value=0, method=None, inplace=True)
+    pos_df.rename(columns={c:"f_pos_"+c for c in pos_df.columns},
+                  inplace=True)
+    return pos_df
 
-def dataframe_to_xy(df, features=r"f_.+", ):
+
+def dataframe_to_xy(df, features=r"f_.+",
+                    label_col="__LABEL__",
+                    skipnull=True):
     """Convert dataframe to standard scikits-learn format."""
     if isinstance(features, str):
         # interpret as regex
@@ -62,15 +94,23 @@ def dataframe_to_xy(df, features=r"f_.+", ):
         featurenames = [c for c in df.columns
                         if c in features]
 
+    if skipnull: # skip missing labels
+        df = df[df[label_col].notnull()]
+
     # Design Matrix X
     df_r = df[featurenames]
     col_to_feature = OrderedDict((i,l) for i,l in enumerate(df_r.columns))
     X = df_r.as_matrix().astype('float64')
 
     # Label Vector y
-    labels = df['__LABEL__'].unique()
+    labels = df[label_col].unique()
+    if len(labels) == 2 and "-SENTENCE-" in labels:
+        # Guarantee sentence is "1" for binary labels
+        labels = sorted(labels,
+                        key=lambda l: 0 if "SENTENCE" in l else l,
+                        reverse=True)
     label_to_int = {l:i for i,l in enumerate(labels)}
     int_to_label = {i:l for i,l in enumerate(labels)}
-    y = array(df['__LABEL__'].map(lambda s: label_to_int[s]))
+    y = array(df[label_col].map(lambda s: label_to_int[s]))
 
     return X, y, int_to_label, col_to_feature
