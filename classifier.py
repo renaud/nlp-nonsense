@@ -43,13 +43,22 @@ def _cv_wrapper(argdict):
     # sys.stderr.flush()
     return (argdict['__idx__'],ret)
 
-def _cv_helper(estimator, X, y, train, test, scoring=metrics.f1_score, **kwargs):
+def _cv_helper(estimator, X, y, train, test, scoring=metrics.f1_score,
+               eval_train=False, **kwargs):
     estimator.fit(X[train],y[train])
+    ret = {}
     ypred = estimator.predict(X[test])
     ytrue = y[test]
-    return scoring(ytrue, ypred)
+    ret['test'] = scoring(ytrue, ypred)
+    if eval_train: # evaluate on training set
+        ypred = estimator.predict(X[train])
+        ytrue = y[train]
+        ret['train'] = scoring(ytrue, ypred)
+    return ret
 
-def cross_val_score(estimator, X, y, scoring=metrics.f1_score, cv=5, n_jobs=5):
+def cross_val_score(estimator, X, y, scoring=metrics.f1_score,
+                    eval_train=False,
+                    cv=5, n_jobs=5):
     """
     Version of sklearn.cross_validation.cross_val_score that allows for more complex
     scoring functions returning arbitrary (serializable) objects.
@@ -60,6 +69,7 @@ def cross_val_score(estimator, X, y, scoring=metrics.f1_score, cv=5, n_jobs=5):
     pool = Pool(n_jobs)
     arglist = [dict(estimator=estimator, X=X, y=y,
                     train=train, test=test,
+                    eval_train=eval_train,
                     scoring=scoring, __idx__=i)
                for i, (train, test) in enumerate(cv)]
     return pool.map(_cv_wrapper, arglist)
@@ -71,12 +81,17 @@ def standard_scorefunc(y, ypred):
             'f1' : metrics.f1_score(y, ypred)
             }
 
-def standard_crossval(estimator, X, y, **kwargs):
+def standard_crossval(estimator, X, y,
+                      eval_train=False, **kwargs):
     results = cross_val_score(estimator, X, y, scoring=standard_scorefunc,
-                              **kwargs)
+                              eval_train=eval_train, **kwargs)
     idx, records = zip(*results)
-    return pd.DataFrame.from_records(records, index=idx,
-                                     columns=['acc','pre','rec','f1'])
+    ret = {}
+    for key in (['train'] if eval_train else [])+['test']:
+        rs = (r[key] for r in records)
+        ret[key] = pd.DataFrame.from_records(rs, index=idx,
+                                    columns=['acc','pre','rec','f1'])
+    return ret
 
 def print_cv_results(res):
     mu = res.mean()
@@ -95,25 +110,30 @@ class ClassifierExperiment(object):
     and provides for grid search and
     cv evaluation."""
 
-    def __init__(self, clf, X, y):
+    def __init__(self, clf, X, y, CV_N_JOBS=6):
         self.clf = clf
         self.clfopt = None
 
         self.X = X
         self.y = y
+        self.CV_N_JOBS=CV_N_JOBS
 
-    def grid_search(self, param_grid, scoring='f1'):
+    def grid_search(self, param_grid, scoring='f1', cv=5):
         clfopt = grid_search.GridSearchCV(self.clf, param_grid,
-                                          scoring='f1',
-                                          cv=5, n_jobs=6)
+                                          scoring=scoring,
+                                          cv=cv, n_jobs=self.CV_N_JOBS)
         clfopt.fit(self.X, self.y)
         self.clfopt = clfopt
         print "Best params: " + str(clfopt.best_params_)
         print "Best score: %.02f%%" % (100*clfopt.best_score_)
         self.clf.set_params(**clfopt.best_params_)
 
-    def eval_cv(self, cv=5, n_jobs=5):
+    def eval_cv(self, cv=5, eval_train=False):
         res = standard_crossval(self.clf, self.X, self.y,
-                                cv=5, n_jobs=5)
-        stats = print_cv_results(res)
+                                eval_train=eval_train,
+                                cv=cv, n_jobs=self.CV_N_JOBS)
+        stats = {}
+        for key in (['train'] if eval_train else [])+['test']:
+            print "== %s sets ==" % key
+            stats[key] = print_cv_results(res[key])
         return res, stats
