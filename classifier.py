@@ -72,7 +72,9 @@ def cross_val_score(estimator, X, y, scoring=metrics.f1_score,
                     eval_train=eval_train,
                     scoring=scoring, __idx__=i)
                for i, (train, test) in enumerate(cv)]
-    return pool.map(_cv_wrapper, arglist)
+    ret = pool.map(_cv_wrapper, arglist)
+    pool.close() # avoid horrendous memory leaks
+    return ret
 
 def standard_scorefunc(y, ypred):
     return {'acc': metrics.accuracy_score(y, ypred),
