@@ -44,10 +44,14 @@ def make_basic_features(df):
                                         [" ", "\t"])
     df['f_npunct'] = df['__TEXT__'].map(punct_counter)
     df['f_rpunct'] = df['f_npunct'] / df['f_nchars']
+
     df['f_ndigit'] = df['__TEXT__'].map(lambda s: sum(1 for c in s
                                   if c.isdigit()))
     df['f_rdigit'] = df['f_ndigit'] / df['f_nchars']
 
+    upper_counter = lambda s: sum(1 for c in s if c.isupper())
+    df['f_nupper'] = df['__TEXT__'].map(upper_counter)
+    df['f_rupper'] = df['f_nupper'] / df['f_nchars']
 
     df['f_nner'] = df['ner'].map(lambda ts: sum(1 for t in ts
                                               if t != 'O'))
@@ -80,6 +84,22 @@ def get_pos_counts(df, firstchar_only=False):
     pos_df.rename(columns={c:"f_pos_"+c for c in pos_df.columns},
                   inplace=True)
     return pos_df
+
+def get_pos_positionals(df):
+    """Make indicator features for part-of-speech tokens
+    at beginning and end of text."""
+    source = df['pos']
+    tagnames = sorted(reduce(lambda a,b: a.union(b), source.map(set), set()))
+    colnames = (["f_pos_begin_"+c for c in tagnames]
+                + ["f_pos_end_"+c for c in tagnames])
+    counters = source.map(lambda l: {"f_pos_begin_"+l[0]:1.0,
+                                     "f_pos_end"+l[-1]:1.0})
+    pos_pos_df = pd.DataFrame.from_records(counters,
+                                           index=df.index,
+                                           columns=colnames,
+                                           coerce_float=True)
+    pos_pos_df.fillna(value=0, method=None, inplace=True)
+    return pos_pos_df
 
 
 def dataframe_to_xy(df, features=r"f_.+",
