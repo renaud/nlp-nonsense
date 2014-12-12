@@ -372,8 +372,12 @@ if __name__ == '__main__':
             data = [entry for entry in data if not entry[0] in choices]
             print "%d entries to go!" % len(data)
 
-
-    curses.wrapper(SelectorApp, data, choices, options)
+    try:
+        curses.wrapper(SelectorApp, data, choices, options)
+    except Exception as e:
+        print "Error: " + repr(e)
+        if not prompt("Save results-so-far?"):
+            raise e
 
     # DEBUG
     print json.dumps(choices, indent=1)

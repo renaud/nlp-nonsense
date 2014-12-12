@@ -43,13 +43,13 @@ def _cv_wrapper(argdict):
     # sys.stderr.flush()
     return (argdict['__idx__'],ret)
 
-def _cv_helper(estimator, X, y, train, test, scoring=metrics.f1_score,
+def _cv_helper(estimator, X, y, train, dev, scoring=metrics.f1_score,
                eval_train=False, **kwargs):
     estimator.fit(X[train],y[train])
     ret = {}
-    ypred = estimator.predict(X[test])
-    ytrue = y[test]
-    ret['test'] = scoring(ytrue, ypred)
+    ypred = estimator.predict(X[dev])
+    ytrue = y[dev]
+    ret['dev'] = scoring(ytrue, ypred)
     if eval_train: # evaluate on training set
         ypred = estimator.predict(X[train])
         ytrue = y[train]
@@ -68,19 +68,20 @@ def cross_val_score(estimator, X, y, scoring=metrics.f1_score,
         cv = StratifiedKFold(y, n_folds=cv)
     pool = Pool(n_jobs)
     arglist = [dict(estimator=estimator, X=X, y=y,
-                    train=train, test=test,
+                    train=train, dev=dev,
                     eval_train=eval_train,
                     scoring=scoring, __idx__=i)
-               for i, (train, test) in enumerate(cv)]
+               for i, (train, dev) in enumerate(cv)]
     ret = pool.map(_cv_wrapper, arglist)
     pool.close() # avoid horrendous memory leaks
     return ret
 
 def standard_scorefunc(y, ypred):
-    return {'acc': metrics.accuracy_score(y, ypred),
-            'pre': metrics.precision_score(y, ypred),
-            'rec': metrics.recall_score(y, ypred),
-            'f1' : metrics.f1_score(y, ypred)
+    return {'len': len(y),
+            'acc': 100.0*metrics.accuracy_score(y, ypred),
+            'pre': 100.0*metrics.precision_score(y, ypred),
+            'rec': 100.0*metrics.recall_score(y, ypred),
+            'f1' : 100.0*metrics.f1_score(y, ypred),
             }
 
 def standard_crossval(estimator, X, y,
@@ -89,10 +90,10 @@ def standard_crossval(estimator, X, y,
                               eval_train=eval_train, **kwargs)
     idx, records = zip(*results)
     ret = {}
-    for key in (['train'] if eval_train else [])+['test']:
+    for key in (['train'] if eval_train else [])+['dev']:
         rs = (r[key] for r in records)
         ret[key] = pd.DataFrame.from_records(rs, index=idx,
-                                    columns=['acc','pre','rec','f1'])
+                                    columns=['len','acc','pre','rec','f1'])
     return ret
 
 def print_cv_results(res):
@@ -100,9 +101,16 @@ def print_cv_results(res):
     sigma = res.std()
     print "%d-fold cv:" % len(res)
     for c in res.columns:
-        print "%4s: %.02f +\- %.02f%%" % (c, 100*mu[c], 100*2*sigma[c]/(len(res)-1.0))
+        print "%4s: %.02f +\- %.02f" % (c, mu[c], 2*sigma[c]/(len(res)-1.0))
 
     return pd.DataFrame([mu, sigma], index=['mu','sigma'])
+
+def print_eval_results(res):
+    print "== test set =="
+    for c in res.index:
+        print "%4s: %.02f" % (c, res[c])
+    return pd.DataFrame([res], index=['mu'],
+                        columns=['len','acc','pre','rec','f1'])
 
 
 from sklearn import grid_search
@@ -129,13 +137,22 @@ class ClassifierExperiment(object):
         print "Best params: " + str(clfopt.best_params_)
         print "Best score: %.02f%%" % (100*clfopt.best_score_)
         self.clf.set_params(**clfopt.best_params_)
+        self.clf.fit(self.X, self.y) # train with best params on full set
+
 
     def eval_cv(self, cv=5, eval_train=False):
         res = standard_crossval(self.clf, self.X, self.y,
                                 eval_train=eval_train,
                                 cv=cv, n_jobs=self.CV_N_JOBS)
         stats = {}
-        for key in (['train'] if eval_train else [])+['test']:
+        for key in (['train'] if eval_train else [])+['dev']:
             print "== %s sets ==" % key
             stats[key] = print_cv_results(res[key])
         return res, stats
+
+    def eval(self, X, y, scoring=standard_scorefunc):
+        # ypred = self.clfopt.best_estimator_.predict(X)
+        ypred = self.clf.predict(X)
+        ytrue = y
+        ret = pd.Series(scoring(ytrue, ypred))
+        return print_eval_results(ret)

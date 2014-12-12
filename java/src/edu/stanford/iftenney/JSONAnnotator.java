@@ -73,7 +73,14 @@ public class JSONAnnotator {
             a.set(CustomGUIDAnnotation.class, guid); // store ID
             a.set(CustomFulltextAnnotation.class, (String)ja.get(0)); // store unmodified fulltext
 
-            JSONArray labels = (JSONArray)ja.get(1);
+            JSONArray labels = null;
+            try {
+                labels = (JSONArray)ja.get(1);
+            } catch (ClassCastException e) {
+                labels = new JSONArray();
+                labels.add(ja.get(1));
+                //labels.put(ja.get(1));
+            }
             a.set(CustomLabelAnnotation.class, labels.toString()); // store custom label
             // a.set(CustomLabelAnnotation.class, (String)ja.get(1)); // store custom label
             sentences.add(a);

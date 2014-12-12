@@ -14,23 +14,115 @@ def binarize_label(l):
     if "SENTENCE" in l: return "-SENTENCE-"
     else: return "-OTHER-"
 
-def load_annotated(filename):
-    records = []
-    with open(filename) as fd:
-        for line in fd:
-            records.append(json.loads(line))
+from sklearn import preprocessing
+class SplitDataset(object):
+    master = None   # master Dataset object
+    Xy_idx = None   # index into df_*
+    X = None        # data vectors
+    y = None        # labels
+    transformer = None  # preprocessing transformer
 
-    df = pd.DataFrame.from_records(records, index='__ID__')
-    # df['text'] = df.word.map(lambda l: " ".join(l))
-    # Handle nested JSON
-    df['__LABEL__'] = df['__LABEL__'].map(parse_labels)
+    def __init__(self, master, X, y, Xy_idx):
+        self.master = master
+        self.X = X
+        self.y = y
+        self.Xy_idx = Xy_idx
 
-    # Disambiguate and binarize labels
-    df["__LABELS__"] = df["__LABEL__"]
-    df["__LABEL__"] = df["__LABEL__"].map(lambda l: l[0] if len(set(l)) == 1 else None)
-    df["__LABEL_BIN__"] = df["__LABEL__"].map(binarize_label)
+    def preprocess(self, transformer=None):
+        if transformer != None:
+            self.transformer = transformer
+            self.X = self.transformer.transform(self.X)
+        else: # standard preprocessing
+            self.transformer = preprocessing.StandardScaler()
+            self.X = self.transformer.fit_transform(self.X)
 
-    return df
+
+class Dataset(object):
+    """Dataset object to encapsulate training or test set."""
+
+    df_master = None    # Master featureset
+    df_pos = None       # POS distributional
+    df_pos_norm = None  # POS distributional, normed
+    df_ppos = None      # POS positional
+
+    train = None    # SplitDataset
+    test = None     # SplitDataset
+
+    int_to_label = None     # map y -> label
+    col_to_feature = None   # map j -> f_name
+
+    def __init__(self, filename):
+        records = []
+        with open(filename) as fd:
+            for line in fd:
+                records.append(json.loads(line))
+
+        df = pd.DataFrame.from_records(records, index='__ID__')
+        # df['text'] = df.word.map(lambda l: " ".join(l))
+        # Handle nested JSON
+        df['__LABEL__'] = df['__LABEL__'].map(parse_labels)
+
+        # Disambiguate and binarize labels
+        df["__LABELS__"] = df["__LABEL__"]
+        df["__LABEL__"] = df["__LABEL__"].map(lambda l: l[0] if len(set(l)) == 1 else None)
+        df["__LABEL_BIN__"] = df["__LABEL__"].map(binarize_label)
+
+        # Count sentences and unambiguous labels
+        nunamb = len(df[df.__LABEL__.notnull()])
+        print "%d unambiguous labels" % nunamb
+        nsentence = len(df[df.__LABEL_BIN__ == "-SENTENCE-"])
+        print "%d sentences (%.02f%%)" % (nsentence, 100*nsentence/(1.0*nunamb))
+
+        # Make basic features
+        df = make_basic_features(df)
+
+        self.df_master = df
+
+        print df.shape
+        # for c in df.columns:
+        #     print c
+
+    def make_pos_features(self):
+        # Distributional
+        pdf = get_pos_counts(self.df_master)
+
+        # L1-normalized distributional
+        pdf_norm = pdf.divide(pdf.sum(axis=0))
+
+        # Positional (begin,end token indicators)
+        ppdf = get_pos_positionals(self.df_master)
+
+        self.df_pos = pdf
+        self.df_pos_norm = pdf_norm
+        self.df_ppos = ppdf
+
+    def to_sklearn(self, level=3, splitat=9000, label_col="__LABEL_BIN__"):
+        data = self.df_master
+        if level >= 2: # merge in normed POS distributional
+            data = data.merge(self.df_pos_norm, how='outer',
+                              left_index=True, right_index=True)
+        if level >= 3:
+            data = data.merge(self.df_ppos, how='outer',
+                              left_index=True, right_index=True)
+
+        # Skip nulls
+        # label_col = "__LABEL_BIN__"
+        data = data[data[label_col].notnull()]
+        Xy_idx = data.index
+
+        X, y, int_to_label, col_to_feature = dataframe_to_xy(data,
+                                                            r"f_.*",
+                                                            label_col=label_col)
+        print "X: " + str(X.shape)
+        print "y: " + str(int_to_label)
+        print "Features: " + ", ".join(col_to_feature.values())
+
+        self.train = SplitDataset(self, X[:splitat], y[:splitat], Xy_idx[:splitat])
+        self.test = SplitDataset(self, X[splitat:], y[splitat:], Xy_idx[splitat:])
+
+        self.int_to_label = int_to_label
+        self.col_to_feature = col_to_feature
+
 
 def make_basic_features(df):
     """Compute basic features."""
