@@ -156,6 +156,13 @@ def make_basic_features(df):
         return s[0].isupper() and (s[-1] in '.?!')
     df['f_sentence_pattern'] = df['__TEXT__'].map(check_sentence_pattern)
 
+    # Normalize any LM features
+    # by dividing logscore by number of words
+    lm_cols = {c:re.sub("_lmscore_", "_lmscore_norm_",c)
+               for c in df.columns if c.startswith("f_lmscore")}
+    for c,cnew in lm_cols.items():
+        df[cnew] = df[c] / df['f_nwords']
+
     return df
 
 # Get all POS tags
